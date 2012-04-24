@@ -1,0 +1,19 @@
+h1 {
+	padding: 0.5em; 
+  font-size: 120%;
+}
+
+#about {
+  background: #ffa;
+  border: 1px solid #ffd324;
+  -webkit-border-radius: 5px;
+  border-radius: 5px;
+  clear:both;
+  margin: 0 0 1em 0;
+  padding:0.5em;
+  line-height: 1.2;
+}
+
+#about h2 {
+  font-size: 100%;
+}
