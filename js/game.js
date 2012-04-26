@@ -1,5 +1,9 @@
 enchant();
 
+// ゲームのサイズ
+var GAME_WIDTH = 320;
+var GAME_HEIGHT = 400;
+
 // タッチだと、どうしても意図してるところより下を叩いてしまうのでそのオフセット
 var TOUCH_OFFSETY = 4;
 
@@ -10,69 +14,95 @@ var ALERT_TIME = 30;
 var BOARD_WIDTH = 8;
 var BOARD_HEIGHT = 8;
 
-//var BOARD_OFFSETX = 32;
-//var BOARD_OFFSETY = 52;
 var BOARD_OFFSETX = 0;
 var BOARD_OFFSETY = 80;
 
-var CHIP_SIZE = 40;
-var CHIP_WIDTH = 24;
-var CHIP_HEIGHT = 32;
-
-var CHIP_DIR = [2, 3, 0, 1];
-var CHIP_WALK = [0, 1, 2, 1];
+var TILE_SIZE = 40;
+var TILE_WIDTH = 24;
+var TILE_HEIGHT = 32;
 
 var POINTER_SIZE = 32;
 var MARKER_SIZE = 36;
 
+// 敵キャラの種類数
 var MONSTER_VARIATION = 5;
+
+// 敵キャラのアニメーションパターン
+var MONSTER_DIR = [2, 3, 0, 1];
+var MONSTER_WALK = [0, 1, 2, 1];
+
+// タイル種別を表す定数
+var TILE_MONSTER = 1;
 
 // ボード
 var Board = new Array (BOARD_WIDTH * BOARD_HEIGHT);
 
-// ボードに配置されるモンスターの情報
-var Monster = function () {
-    this.birth = function () {
-		this.chipnum = Math.floor(Math.random() * MONSTER_VARIATION);
-		this.direction = Math.floor(Math.random() * 3);
-		this.step = 0;
-		this.walkspeed = Math.floor(Math.random() * 4) + 2;
-		this.disapear = false;
+// ボードに配置されるタイルの情報
+var Tile = enchant.Class.create({
+    initialize: function(boardx, boardy) {
+		this.boardx = boardx;
+		this.boardy = boardy;
+		this.boardnumber = boardy * BOARD_WIDTH + boardy;
+		// タイルの生成
+		this.birth();
+	},
+
+    birth: function(boardx, boardy) {
+		this.tileClass = TILE_MONSTER; //現在のプロトタイプでは種別はこれのみ
+		switch (this.tileClass) {
+		case TILE_MONSTER:
+			this.tileNumber = Math.floor(Math.random() * MONSTER_VARIATION);
+			this.image = 'images/chara.png';
+			//ベースとなるフレームの計算
+			this.baseFrame = Math.floor(this.tileNumber / 4) * (4 * 3 * 4);
+			this.direction = Math.floor(Math.random() * 3);
+			this.step = 0;
+			this.walkspeed = Math.floor(Math.random() * 4) + 2;
+			this.frame = this.baseFrame + MONSTER_DIR[this.direction] * (4 * 3) + (this.tileNumber % 4) * 3 + MONSTER_WALK[this.step];
+			break;
+		}
+		this.vanished = false;
 		this.marked = false;
-    };
-    
-    this.walk = function () {
-		if ((game.frame % this.walkspeed) === 0) {
-			this.step++;
-			if (this.step == 4) {this.step = 0;}
+	},
+
+	animation: function() {
+		switch (this.tileClass) {
+		case TILE_MONSTER:
+			// 歩くアニメーション
+			if ((game.frame % this.walkspeed) === 0) {
+				this.step++;
+				if (this.step == 4) {this.step = 0;}
+			}
+			// 時折向きを変える
+			if (Math.floor(Math.random() * 60) === 0) {
+				this.direction = Math.floor(Math.random() * 4);
+			}
+			this.frame = this.baseFrame + MONSTER_DIR[this.direction] * (4 * 3) + (this.tileNumber % 4) * 3 + MONSTER_WALK[this.step];
+			break;
 		}
-    };
-    
-    this.randomturn = function () {
-		if (Math.floor(Math.random() * 60) === 0) {
-			this.direction = Math.floor(Math.random() * 4);
-		}
-    };
-};
+	},
+
+	vanish: function() {
+		
+	}
+});
 
 // マーク
 var Mark = new Array ();
-var marked = null;
-var markmode = false;
 
 var Marker = enchant.Class.create(enchant.Sprite, {
-	initialize: function(boardx, boardy, recentboardx, recentboardy, marknum) {
+	initialize: function(boardx, boardy, recentboardx, recentboardy, marknumber) {
 		this.boardx = boardx;
 		this.boardy = boardy;
-		this.boardnum = boardy * BOARD_WIDTH + boardx;
-		this.marknum = marknum;
+		this.boardnumber = boardy * BOARD_WIDTH + boardx;
+		this.marknumber = marknumber;
 		enchant.Sprite.call(this, MARKER_SIZE, MARKER_SIZE);
 		this.image = game.assets['images/line.png'];
-		if (marknum === 0) {
+		if (marknumber === 0) {
 			this.frame = 0;
 			this.opacity = 0.5;
-			this.x = boardx * CHIP_SIZE + ((CHIP_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETX;
-			this.y = boardy * CHIP_SIZE + ((CHIP_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETY;
+			this.x = boardx * TILE_SIZE + ((TILE_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETX;
+			this.y = boardy * TILE_SIZE + ((TILE_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETY;
 		} else {
 			if (recentboardy == boardy) {
 				this.frame = 1;
@@ -87,8 +117,8 @@ var Marker = enchant.Class.create(enchant.Sprite, {
 				this.frame = 4;
 			}
 			this.opacity = 0.5;
-			this.x = (boardx + recentboardx) / 2 * CHIP_SIZE + ((CHIP_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETX;
-			this.y = (boardy + recentboardy) / 2 * CHIP_SIZE + ((CHIP_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETY;
+			this.x = (boardx + recentboardx) / 2 * TILE_SIZE + ((TILE_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETX;
+			this.y = (boardy + recentboardy) / 2 * TILE_SIZE + ((TILE_SIZE - MARKER_SIZE) / 2) + BOARD_OFFSETY;
 		}
 		this.scale(1.25, 1.25);
 		game.rootScene.addChild(this);
@@ -100,38 +130,26 @@ var Marker = enchant.Class.create(enchant.Sprite, {
     }
 });
 
-// ボードの各チップのためのクラス
-var Chip = enchant.Class.create(enchant.Sprite, {
+// ボード上のタイルを並べるグリッドのスプライト
+var Grid = enchant.Class.create(enchant.Sprite, {
 	initialize: function(boardx, boardy) {
-		this.boardx = boardx;
-		this.boardy = boardy;
-		this.num = (boardy * BOARD_HEIGHT) + boardx;
-		enchant.Sprite.call(this, CHIP_WIDTH, CHIP_HEIGHT);
-		this.image = game.assets['images/chara.png'];
-		// this.scale(CHIP_SIZE / CHIP_WIDTH, CHIP_SIZE / CHIP_HEIGHT);
-		this.x = boardx * CHIP_SIZE + ((CHIP_SIZE - CHIP_WIDTH) / 2) + BOARD_OFFSETX;
-		this.y = boardy * CHIP_SIZE + ((CHIP_SIZE - CHIP_HEIGHT) / 2) + BOARD_OFFSETY;
-		this.centerx = this.x + (CHIP_SIZE / 2);
-		this.centery = this.y + (CHIP_SIZE / 2);
-		Board[this.num] = new Monster();
-		Board[this.num].birth();
+		this.boardnumber = boardy * BOARD_WIDTH + boardx;
+		enchant.Sprite.call(this, TILE_WIDTH, TILE_HEIGHT);
+		this.image = game.assets[Board[this.boardnumber].image];
+		this.frame = Board[this.boardnumber].frame;
+		// this.scale(TILE_SIZE / TILE_WIDTH, TILE_SIZE / TILE_HEIGHT); // 速度がかなり犠牲になるっぽい
+		this.x = boardx * TILE_SIZE + ((TILE_SIZE - TILE_WIDTH) / 2) + BOARD_OFFSETX;
+		this.y = boardy * TILE_SIZE + ((TILE_SIZE - TILE_HEIGHT) / 2) + BOARD_OFFSETY;
+		this.centerx = this.x + (TILE_SIZE / 2);
+		this.centery = this.y + (TILE_SIZE / 2);
 		game.rootScene.addChild(this);
 		this.addEventListener(Event.ENTER_FRAME, this.animation);
     },
-    
-    animation: function () {
-		this.monster = Board[this.num];
-		Board[this.num].walk();
-		Board[this.num].randomturn();
-		this.frame = Math.floor(Board[this.num].chipnum / 4) * (4 * 3 * 4) + CHIP_DIR[Board[this.num].direction] * (4 * 3) + (Board[this.num].chipnum % 4) * 3 + CHIP_WALK[Board[this.num].step];
-    },
-    
-    mark: function () {
-		Board[this.num].disapear = true;
-    },
-
-    remove: function () {
-		Board[this.num].disapear = true;
+									
+	// アニメーションは実際のタイル次第
+	animation: function () {
+		Board[this.boardnumber].animation();
+		this.frame = Board[this.boardnumber].frame;
     }
 });
 
@@ -155,7 +173,6 @@ var PopScore = enchant.Class.create({
             } else if (count < 15) {
                 scoreupLabel.y += 5;
                 scoreupLabel.opacity = 1 - ((count - 5) * 0.1);
-                console.log(scoreupLabel.opacity);
             } else {
                 game.rootScene.removeChild(scoreupLabel);
                 delete scoreupLabel;
@@ -174,25 +191,33 @@ var distance = function(x1, y1, x2, y2) {
 
 // メインルーチン
 window.onload = function() {
-    game = new Game(320, 400);
+    game = new Game(GAME_WIDTH, GAME_HEIGHT);
 
-    var chips = [];
-    
+	// 得点
     var score = 0;
+
+	var markedClass = null;
+	var markedNumber = null;
+	var markmode = false;
 
     game.preload('images/bg_image.jpg', 'images/chara.png', 'images/marker.png', 'images/line.png');
     game.onload = function() {
+
+		// 背景設定
 		var bgImage = new Sprite(320, 400);
 		bgImage.image = game.assets['images/bg_image.jpg'];
-		//bgImage.y = BOARD_OFFSETY;
 		game.rootScene.addChild(bgImage);
+
+		// ボードの生成
 		for (var i = 0; i < BOARD_HEIGHT; i++) {
 			for (var j = 0; j < BOARD_WIDTH; j++) {
-				var num = i * BOARD_HEIGHT + j;
-				chips[num] = new Chip(j, i);
+				var number = i * BOARD_WIDTH + j;
+				Board[number] = new Tile(j, i);
+				Board[number].grid = new Grid(j, i);
 			}
 		}
 
+		// 得点表示
 		var scoreLabel = new Label();
 		scoreLabel.x = 10;
 		scoreLabel.y = 32;
@@ -208,6 +233,7 @@ window.onload = function() {
         });
         game.rootScene.addChild(scoreLabel);
 
+		// 時間表示
 		var timeLabel = new Label();
 		timeLabel.x = 220;
 		timeLabel.y = 32;
@@ -228,101 +254,117 @@ window.onload = function() {
 			}
         });
         game.rootScene.addChild(timeLabel);
-	
+
+		// 
 		game.rootScene.addEventListener(Event.ENTER_FRAME, function () {
 			if (markmode === false) {
 				for (var i = BOARD_HEIGHT - 1; i >= 0; i--) {
 					for (var j = 0; j < BOARD_WIDTH; j++) {
-						var num = (i * BOARD_WIDTH) + j;
-						if (Board[num].disapear === true) {
+						var boardnumber = (i * BOARD_WIDTH) + j;
+						// ボード上のタイルが論理消滅している場合に上から下におろす処理
+						if (Board[boardnumber].vanished === true) {
 							if (i === 0) {
-								Board[num].birth();
+								// 一番上の行の場合は新規生成
+								Board[boardnumber].birth();
 							} else {
-								Board[num].chipnum = Board[num - BOARD_WIDTH].chipnum;
-								Board[num].direction = Board[num - BOARD_WIDTH].direction;
-								Board[num].step = Board[num - BOARD_WIDTH].step;
-								Board[num].walkspeed = Board[num - BOARD_WIDTH].walkspeed;
-								Board[num].disapear = Board[num - BOARD_WIDTH].disapear;
-								Board[num - BOARD_WIDTH].disapear = true;
+								// 一つ上のタイルを下に下ろす
+								Board[boardnumber].tileClass = Board[boardnumber - BOARD_WIDTH].tileClass;
+								Board[boardnumber].tileNumber = Board[boardnumber - BOARD_WIDTH].tileNumber;
+								switch (Board[boardnumber].tileClass) {
+								case TILE_MONSTER:
+									Board[boardnumber].baseFrame = Board[boardnumber - BOARD_WIDTH].baseFrame;
+									Board[boardnumber].direction = Board[boardnumber - BOARD_WIDTH].direction;
+									Board[boardnumber].step = Board[boardnumber - BOARD_WIDTH].step;
+									Board[boardnumber].walkspeed = Board[boardnumber - BOARD_WIDTH].walkspeed;
+									break;
+								}
+								Board[boardnumber].vanished = Board[boardnumber - BOARD_WIDTH].vanished;
+								Board[boardnumber - BOARD_WIDTH].vanished = true;
 							}
 						}
 					}
 				}
 			}
-			game.rootScene.addEventListener(Event.TOUCH_START, function (e) {
-				if ((e.localX >= BOARD_OFFSETX) && (e.localX < BOARD_OFFSETX + BOARD_WIDTH * CHIP_SIZE) && (e.localY >= BOARD_OFFSETY) && (e.localY < BOARD_OFFSETY + BOARD_HEIGHT * CHIP_SIZE))  {
-					var touchX = e.localX;
-        			var touchY = e.localY - TOUCH_OFFSETY;
-					if (markmode === false) {
-						var touchboardx = Math.floor((e.localX - BOARD_OFFSETX) / CHIP_SIZE);
-						var touchboardy = Math.floor((e.localY - BOARD_OFFSETY) / CHIP_SIZE);
-						var touchboardnum = touchboardy * BOARD_WIDTH + touchboardx;
-						markmode = true;
-						marked = Board[touchboardnum].chipnum;
-						var markernum = Marker.length;
-						Mark[markernum] = new Marker(touchboardx, touchboardy, 0, 0, markernum);
-						Board[touchboardnum].marked = markernum;
-					}
+		});
+
+		game.rootScene.addEventListener(Event.TOUCH_START, function (e) {
+			var touchX = e.localX;
+        	var touchY = e.localY - TOUCH_OFFSETY;
+			if ((touchX >= BOARD_OFFSETX) && (touchX < BOARD_OFFSETX + BOARD_WIDTH * TILE_SIZE) && (touchY >= BOARD_OFFSETY) && (touchY < BOARD_OFFSETY + BOARD_HEIGHT * TILE_SIZE))  {
+				if (markmode === false) {
+					var touchboardx = Math.floor((touchX - BOARD_OFFSETX) / TILE_SIZE);
+					var touchboardy = Math.floor((touchY - BOARD_OFFSETY) / TILE_SIZE);
+					var touchboardnumber = touchboardy * BOARD_WIDTH + touchboardx;
+					markmode = true;
+					markedClass = Board[touchboardnumber].tileClass;
+					markedNumber = Board[touchboardnumber].tileNumber;
+					var markerNumber = Marker.length;
+					Mark[markerNumber] = new Marker(touchboardx, touchboardy, 0, 0, markerNumber);
+					Board[touchboardnumber].marked = markerNumber;
 				}
-			});
+			}
+		});
 	    
-			game.rootScene.addEventListener(Event.TOUCH_MOVE, function (e) {
-				var touchX = e.localX;
-				var touchY = e.localY - TOUCH_OFFSETY;
-				if (markmode === true) {
-					var touchboardx = Math.floor((touchX - BOARD_OFFSETX) / CHIP_SIZE);
-					var touchboardy = Math.floor((touchY - BOARD_OFFSETY) / CHIP_SIZE);
-					var touchboardnum = touchboardy * BOARD_WIDTH + touchboardx;
-					if ((touchboardx >= 0) && (touchboardx < BOARD_WIDTH) && (touchboardy >= 0) && (touchboardy < BOARD_HEIGHT) && (distance(touchX, touchY, chips[touchboardnum].centerx, chips[touchboardnum].centery) < CHIP_SIZE / 2)) {
-						if (Board[touchboardnum].marked === false) {
-							var markernum = Mark.length;
-							if ((Math.pow(Mark[markernum - 1].boardx - touchboardx, 2) <= 1) && (Math.pow(Mark[markernum - 1].boardy - touchboardy, 2) <= 1)) {
-								if (Board[touchboardnum].chipnum == marked) {
-									// 近隣かつ同種だった場合にマークを伸ばす
-									Mark[markernum] = new Marker(touchboardx, touchboardy, Mark[markernum - 1].boardx, Mark[markernum - 1].boardy, markernum);
-									Board[touchboardnum].marked = markernum;
-								}
+		game.rootScene.addEventListener(Event.TOUCH_MOVE, function (e) {
+			var touchX = e.localX;
+			var touchY = e.localY - TOUCH_OFFSETY;
+			if (markmode === true) {
+				var touchboardx = Math.floor((touchX - BOARD_OFFSETX) / TILE_SIZE);
+				var touchboardy = Math.floor((touchY - BOARD_OFFSETY) / TILE_SIZE);
+				var touchboardnumber = touchboardy * BOARD_WIDTH + touchboardx;
+				if ((touchboardx >= 0) && (touchboardx < BOARD_WIDTH) && (touchboardy >= 0) && (touchboardy < BOARD_HEIGHT) && (distance(touchX, touchY, Board[touchboardnumber].grid.centerx, Board[touchboardnumber].grid.centery) < TILE_SIZE / 2)) {
+					if (Board[touchboardnumber].marked === false) {
+						var markerNumber = Mark.length;
+						if ((Math.pow(Mark[markerNumber - 1].boardx - touchboardx, 2) <= 1) && (Math.pow(Mark[markerNumber - 1].boardy - touchboardy, 2) <= 1)) {
+							if ((Board[touchboardnumber].tileClass == markedClass) && (Board[touchboardnumber].tileNumber == markedNumber)) {
+								// 近隣かつ同種だった場合にマークを伸ばす
+								Mark[markerNumber] = new Marker(touchboardx, touchboardy, Mark[markerNumber - 1].boardx, Mark[markerNumber - 1].boardy, markerNumber);
+								Board[touchboardnumber].marked = markerNumber;
 							}
-						} else {
-							markernum = Board[touchboardnum].marked;
-							for (var i = Mark.length - 1; i > markernum; i--) {
-								// 経路の途中に戻った場合、そこまでマークを戻す
-								Board[Mark[i].boardnum].marked = false;
-								Mark[i].remove();
-								Mark = Mark.slice(0, i);
-							}
+						}
+					} else {
+						var markerNumber = Board[touchboardnumber].marked;
+						for (var i = Mark.length - 1; i > markerNumber; i--) {
+							// 経路の途中に戻った場合、そこまでマークを戻す
+							Board[Mark[i].boardnumber].marked = false;
+							Mark[i].remove();
+							Mark = Mark.slice(0, i);
 						}
 					}
 				}
-			});
+			}
+		});
 	    
-			game.rootScene.addEventListener(Event.TOUCH_END, function (e) {
-				if (markmode === true) {
+		game.rootScene.addEventListener(Event.TOUCH_END, function (e) {
+			if (markmode === true) {
 	
-					var deletemode = false;
-					if (Mark.length >=2) {
-						deletemode = true;
-						if (Mark.length == 2) {
-							scoreup = -50;
-						} else {
-							scoreup = 100 + ((50 + 10 * (Mark.length - 4)) * (Mark.length - 3)); 
-						}
-						var popX = Mark[Mark.length - 1].boardx * CHIP_SIZE + BOARD_OFFSETX + 16;
-						var popY = Mark[Mark.length - 1].boardy * CHIP_SIZE + BOARD_OFFSETY + 30;
-						var popScores = new PopScore(popX, popY, scoreup);
-						score += scoreup;
+				var deletemode = false;
+				var markerNumber = Mark.length;
+				if (markerNumber >=2) {
+					deletemode = true;
+					if (markerNumber == 2) {
+						// 2つしかつながってない場合は減点
+						scoreup = -50;
+					} else {
+						// 3つ以上つながっている場合の特典ルール
+						scoreup = 100 + ((50 + 10 * (Mark.length - 4)) * (Mark.length - 3)); 
 					}
-					markmode = false;
-					for(var i in Mark) {
-						if (deletemode === true) {
-							chips[Mark[i].boardnum].remove();
-						}
-						Board[Mark[i].boardnum].marked = false;
-						Mark[i].remove();
-					}
-					Mark = [];
+					// 得点のポップアップは最後に選択されたタイルの近くに出る
+					var popX = Mark[markerNumber - 1].boardx * TILE_SIZE + BOARD_OFFSETX + 16;
+					var popY = Mark[markerNumber - 1].boardy * TILE_SIZE + BOARD_OFFSETY + 30;
+					var popScores = new PopScore(popX, popY, scoreup);
+					score += scoreup;
 				}
-			});
+				markmode = false;
+				for(var i in Mark) {
+					if (deletemode === true) {
+						Board[Mark[i].boardnumber].vanished = true;
+					}
+					Board[Mark[i].boardnumber].marked = false;
+					Mark[i].remove();
+				}
+				Mark = [];
+			}
 		});
     };
     game.fps = 15;
